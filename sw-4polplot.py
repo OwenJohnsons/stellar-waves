@@ -28,6 +28,7 @@ def rfi_masking(your_data, your_object, fil, rfi_plot_cond=True):
     masked_data = np.where(rfi_mask, np.round(np.median(removed_data)), your_data)
 
     print('=== RFI Statistics ===')
+    print('Root Mean Square: %s' % rms_calc(your_data))
     print('Number of masked channels for %s: %s' % (your_object.your_header.filename, np.sum(rfi_mask)))
     print('Percentage of masked channeles: %s' % float((np.sum(rfi_mask)/your_object.your_header.nchans)*100))
     print('Data: %s ± %s' % (np.mean(your_data), np.std(your_data)))
@@ -140,6 +141,10 @@ def plot_rfi(data, fil, mask=None):
             plt.tight_layout()
             plt.savefig("rfi_masks/%s.png" % fil[0:-4])
 
+def rms_calc(data): 
+    rms = np.sqrt(np.mean(data**2))
+    return rms
+
 # --- Main --- 
 parser = argparse.ArgumentParser(description='Dynamic Spectra Plotter for 4 polarisations')
 parser.add_argument('-b', '--bandwidth', type=int, help='Bandwidth in MHz', required=False, default=10)
@@ -155,12 +160,6 @@ print('Filterbanks in directory....')
 for file in filterbank_list:
     print(file)
 
-if not os.path.exists('dynamic_spectra'):
-    os.makedirs('dynamic_spectra')
-
-if not os.path.exists('rfi_masks'):
-    os.makedirs('rfi_masks')
-
 dict, new_tsamp = data_scrunch(filterbank_list, time_res=tres_user)
 print('Data Scrunching Complete....')
 
@@ -172,6 +171,19 @@ channel_bw = header.foff; channel_num = header.nchans
 nsamples = header.nspectra
 bottom_freq = top_freq - abs(channel_bw*channel_num)
 
+# --- Directory Creation --- #
+if not os.path.exists('dynamic_spectra'):
+    os.makedirs('dynamic_spectra')
+
+if not os.path.exists('rfi_masks'):
+    os.makedirs('rfi_masks')
+
+subdir = '%s-%s-%sbit-4pol' % (header.source_name, header.tstart_utc, header.nbits)
+
+if not os.path.exists('dynamic_spectra/%s' % (subdir)):
+    os.makedirs('dynamic_spectra/%s' % (subdir))
+
+# --- Main Execution --- #
 for i in tqdm(np.arange(bottom_freq, (top_freq - bandwidth), bandwidth)):
     # Define frequency range for slicing
     freq_range_start = i  # MHz
@@ -186,38 +198,40 @@ for i in tqdm(np.arange(bottom_freq, (top_freq - bandwidth), bandwidth)):
     xQ, yQ, sliced_dataQ = data2plot(dict['Q'], start_index=start_idx, end_index=end_idx, freq_range_start=freq_range_start, freq_range_end=freq_range_end, time_res=new_tsamp)
     xU, yU, sliced_dataU = data2plot(dict['U'], start_index=start_idx, end_index=end_idx, freq_range_start=freq_range_start, freq_range_end=freq_range_end, time_res=new_tsamp)
     xV, yV, sliced_dataV = data2plot(dict['V'], start_index=start_idx, end_index=end_idx, freq_range_start=freq_range_start, freq_range_end=freq_range_end, time_res=new_tsamp)
-  
+
+    print(sliced_dataI)
+    
     fig = plt.figure(figsize=(8, 4 * 2))
     gs = fig.add_gridspec(4, 1, hspace=0)
 
     axes = [fig.add_subplot(gs[i, 0]) for i in range(4)]
-    vmax_multiple = 1
 
     x_extent = [0, xI.max()]  
     y_extent = [freq_range_start, freq_range_end] 
 
-    # Plot Stokes I
-    axes[0].imshow(sliced_dataI, extent=x_extent + y_extent, aspect='auto', vmax=np.mean(sliced_dataI.T) + vmax_multiple*np.std(sliced_dataI.T))
+    vmax_stokesI, vmin_stokesI = np.nanpercentile(sliced_dataI, (90, 30))
+    axes[0].imshow(sliced_dataI.T, extent=x_extent + y_extent, aspect='auto', vmax=vmax_stokesI, vmin =vmin_stokesI, interpolation = 'nearest', cmap='Blues')
     axes[0].set_ylabel('Frequency (MHz)')
     axes[0].set_title('Dynamic Spectra for %s starting at %s : Time Resolution %s (s)' % (header.source_name, header.tstart_utc, np.round(new_tsamp,1)))
-    axes[0].annotate('Stokes I', xy=(1, 1), xytext=(-5, -5), xycoords='axes fraction', textcoords='offset points', horizontalalignment='right', verticalalignment='top', fontsize=12, color='black')
+    axes[0].annotate('Stokes I', xy=(1, 1), xytext=(-5, -5), xycoords='axes fraction', textcoords='offset points', horizontalalignment='right', verticalalignment='top', fontsize=12, color='black')#, bbox=dict(facecolor='none', edgecolor='black', pad=10.0))
 
     # Plot Stokes Q
-    axes[1].imshow(sliced_dataQ, extent=x_extent + y_extent, aspect='auto', vmax=np.mean(sliced_dataQ.T) + vmax_multiple*np.std(sliced_dataQ.T))
+    vmax_stokesQ, vmin_stokesQ = np.nanpercentile(sliced_dataQ, (90, 30))
+    axes[1].imshow(sliced_dataQ.T, extent=x_extent + y_extent, aspect='auto', vmax=vmax_stokesQ, vmin = vmin_stokesQ, interpolation = 'nearest', cmap='Blues')
     axes[1].set_ylabel('Frequency (MHz)')
     axes[1].annotate('Stokes Q', xy=(1, 1), xytext=(-5, -5), xycoords='axes fraction', textcoords='offset points', horizontalalignment='right', verticalalignment='top', fontsize=12, color='black')
 
     # Plot Stokes U
-    axes[2].imshow(sliced_dataU, extent=x_extent + y_extent, aspect='auto', vmax=np.mean(sliced_dataU.T) + vmax_multiple*np.std(sliced_dataU.T))
+    vmax_stokesU, vmin_stokesU = np.nanpercentile(sliced_dataU, (90, 30))
+    axes[2].imshow(sliced_dataU.T, extent=x_extent + y_extent, aspect='auto', vmax=vmax_stokesU, vmin = vmin_stokesU, interpolation = 'nearest', cmap='Blues')
     axes[2].set_ylabel('Frequency (MHz)')
     axes[2].annotate('Stokes U', xy=(1, 1), xytext=(-5, -5), xycoords='axes fraction', textcoords='offset points', horizontalalignment='right', verticalalignment='top', fontsize=12, color='black')
 
     # Plot Stokes V
-    axes[3].imshow(sliced_dataV, extent=x_extent + y_extent, aspect='auto', vmax=np.mean(sliced_dataV.T) + vmax_multiple*np.std(sliced_dataV.T))
+    vmax_stokesV, vmin_stokesV = np.nanpercentile(sliced_dataV, (90, 30))
+    axes[3].imshow(sliced_dataV.T, extent=x_extent + y_extent, aspect='auto', vmax=vmax_stokesV, vmin = vmin_stokesV, interpolation = 'nearest', cmap='Blues')
     axes[3].set_ylabel('Frequency (MHz)')
     axes[3].annotate('Stokes V', xy=(1, 1), xytext=(-5, -5), xycoords='axes fraction', textcoords='offset points', horizontalalignment='right', verticalalignment='top', fontsize=12, color='black')
 
-    axes[-1].set_xlabel('Time (Hours)')
-
-    plt.savefig('dynamic_spectra/%s-%s-%sbit-4pol-Freq[%s,%s].png' % (header.source_name, header.tstart_utc, header.nbits, i, i + bandwidth))
+    plt.savefig('dynamic_spectra/%s/%s-%s-%sbit-4pol-Freq[%s,%s].png' % (subdir, header.source_name, header.tstart_utc, header.nbits, i, i + bandwidth))
     plt.close()
