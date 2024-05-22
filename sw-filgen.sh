@@ -41,9 +41,10 @@ lofar_udp_extractor \
     -a "-fch1 200 -fo -0.1953125 -source ${source_} -ra ${RA} -dec ${DEC}" \
     -o "/mnt/ucc4_data2/data/Owen/raw-radio-stars/${source_}_${formatted_date}_raw_S%d.fil" | tee -a "./logs/filgen_output_${source_}_${formatted_date}.log"
 
-# # --- Fil Generation ---
+# --- Fil Generation ---
 for i in {0..3}; do
     if [ ! -f "/mnt/ucc4_data2/data/Owen/raw-radio-stars/${source_}_${formatted_date}_S${i}.fil" ]; then
+        # echo "Running digifil for ${i + 1} out of 4 files"
         digifil -b-32 -t 128 -c -I 0 "/mnt/ucc4_data2/data/Owen/raw-radio-stars/${source_}_${formatted_date}_raw_S${i}.fil" \
         -o "/mnt/ucc4_data2/data/Owen/raw-radio-stars/${source_}_${formatted_date}_S${i}.fil"
         chmod 777 "/mnt/ucc4_data2/data/Owen/raw-radio-stars/${source_}_${formatted_date}_S${i}.fil"
