@@ -6,9 +6,12 @@ zst_files=(${path}/*.zst)
 start_time=$(echo "${zst_files[0]}" | awk -F '[/_T]' '{print $9}' | sed 's/..$//')
 date=$(echo "${zst_files[0]}" | cut -d'/' -f8 | cut -d'.' -f3 | cut -dT -f1)
 time=$(echo "${zst_files[0]}" | cut -d'/' -f8 | cut -dT -f2 | cut -d'.' -f1)
-formatted_date=$(echo $start_time | sed 's/\(....\)\(..\)\(..\)\(..\)\(..\)/\1-\2-\3T\4:\5:/; s/\(.*\):/\1\:/')
+formatted_date=${date}T${time}
 RA=$(python -c "from astropy.coordinates import SkyCoord; c = SkyCoord.from_name('$source'); print(c.ra.to_string(unit='hourangle', sep=':', precision=2))")
 DEC=$(python -c "from astropy.coordinates import SkyCoord; c = SkyCoord.from_name('$source'); print(c.dec.to_string(unit='degree', sep=':', precision=2))")
+RA_rad=$(python -c "from astropy.coordinates import SkyCoord; from astropy import units as u; c = SkyCoord.from_name('$source'); print(c.ra.to(u.radian).value)")
+DEC_rad=$(python -c "from astropy.coordinates import SkyCoord; from astropy import units as u; c = SkyCoord.from_name('$source'); print(c.dec.to(u.radian).value)")
+
 tstartmjd=$(python -c "from astropy.time import Time; print(Time('$formatted_date').mjd)" )
 
 
@@ -17,8 +20,10 @@ echo " Path: $path"
 echo " Number of .zst files: $(ls -1a "${path}"/udp*.zst | wc -l)"
 echo " Obs Date: $date"
 echo " Obs Time: $time"
-echo " RA: $RA"
+echo " RA:  $RA"
 echo " DEC: $DEC"
+echo " RA (rad): $RA_rad"
+echo " DEC (rad): $DEC_rad"
 echo " MJD Start: $tstartmjd"
 echo " =========================================================== "
 
@@ -39,6 +44,8 @@ lofar_udp_extractor \
     -u 4 \
     -p 154 \
     -a "-fch1 200 -fo -0.1953125 -source ${source_} -ra ${RA} -dec ${DEC}" \
+    -d "${RA_rad},${DEC_rad},J2000" \
+    -c "HBA,12:499" \
     -o "/mnt/ucc4_data2/data/Owen/raw-radio-stars/${source_}_${formatted_date}_raw_S%d.fil" | tee -a "./logs/filgen_output_${source_}_${formatted_date}.log"
 
 # --- Fil Generation ---
