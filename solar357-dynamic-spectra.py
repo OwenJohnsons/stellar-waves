@@ -7,10 +7,11 @@ import numpy as np
 import your
 import matplotlib.pyplot as plt
 import scienceplots
-plt.style.use(['science','ieee', 'no-latex'])
 from sigpyproc.readers import FilReader
 from astropy.time import Time
 import os
+
+plt.style.use(['science','ieee', 'no-latex'])
 
 def parse_args():
     """
@@ -43,11 +44,30 @@ def get_data(fil, start_idx, end_idx):
     data = your_object.get_data(nstart=start_idx, nsamp=(end_idx - start_idx + 1))
     return data
 
+def assign_frequencies(data, mode):
+    """
+    Assign the frequency range based on the RCU mode.
+    """
+    if mode == 3:
+        freq_start, freq_end = 10, 90  # Mode 3: 10-90 MHz
+    elif mode == 5:
+        freq_start, freq_end = 110, 190  # Mode 5: 110-190 MHz
+    elif mode == 7:
+        freq_start, freq_end = 210, 270  # Mode 7: 210-270 MHz
+    else:
+        raise ValueError("Unsupported RCU mode")
+
+    nchans = data.shape[1]
+    freqs = np.linspace(freq_start, freq_end, nchans)
+    return freqs
+
 def main():
     args = parse_args()
     fil_path = args.fil
     time = get_time(fil_path) 
     date = mjd_to_date(time[0])[0:10]
+    header = your.Your(fil_path).your_header 
+   
 
     start_time = date + ' ' + args.start_time
     end_time = date + ' ' + args.end_time 
@@ -69,52 +89,30 @@ def main():
     data = get_data(fil_path, start_idx, end_idx)
     print('Data Shape:', data.shape)
 
-    # --- Plotting Section --- #
-    header = your.Your(fil_path).your_header
-    top_freq = 270
-    bottom_freq = 10
-    time_res = (time[end_idx] - time[start_idx]) * 24 * 3600 / (end_idx - start_idx)
+    # Split data based on the modes
+    mode3_data = data[:, :200]
+    mode5_data = data[:, 200:400]
+    mode7_data = data[:, 400:]
 
-    print('====== Frequency Info ======')
-    print('Top Frequency   :', top_freq)
-    print('Bottom Frequency:', bottom_freq)
-    print('Time Resolution (s) :', time_res)
+    mode3_freqs = assign_frequencies(mode3_data, 3)
+    mode5_freqs = assign_frequencies(mode5_data, 5)
+    mode7_freqs = assign_frequencies(mode7_data, 7)
 
-    subdir = '%s-%s-%sbit' % (header.source_name, header.tstart_utc, header.nbits)
+    # NaN arrays with the gaps between 90 and 110 MHz and 190 and 210 MHz
+    gap1 = np.full((data.shape[0], 20), np.nan)
+    gap2 = np.full((data.shape[0], 20), np.nan)
 
-    if not os.path.exists('dynamic_spectra'):
-        os.makedirs('dynamic_spectra')
+    # Concatenate the data
+    final_data = np.concatenate((mode3_data, gap1, mode5_data, gap2, mode7_data), axis=1)
+    final_freqs = np.concatenate((mode3_freqs, np.full(200, np.nan), mode5_freqs, np.full(200, np.nan), mode7_freqs))
 
-    if not os.path.exists('dynamic_spectra/%s' % (subdir)):
-        os.makedirs('dynamic_spectra/%s' % (subdir))
+    # Plot the dynamic spectra
+    plt.figure(figsize=(12, 6))
+    plt.imshow(final_data.T, aspect='auto', extent=[time[start_idx], time[end_idx], final_freqs[0], final_freqs[-1]], cmap='viridis')
+    plt.xlabel('Time')
+    plt.ylabel('Frequency (MHz)')
+    plt.savefig('test.png')
 
-    # Prepare data for plotting (entire frequency range)
-    freq_range_start = bottom_freq
-    freq_range_end = top_freq
-    start_idx_freq = 0
-    end_idx_freq = header.nchans
-
-    # Slicing data for plotting
-    sliced_data = data[:, start_idx_freq:end_idx_freq]
-
-    y = np.linspace(freq_range_start, freq_range_end, sliced_data.shape[1])  # Frequency range
-    x = (np.arange(sliced_data.shape[0]) * time_res / (60**2))  # Time in hours
-
-    fig = plt.figure(figsize=(10, 6))
-    ax = fig.add_subplot(111)
-
-    x_extent = [0, x.max()]
-    y_extent = [freq_range_start, freq_range_end]
-
-    vmax, vmin = np.nanpercentile(sliced_data, (90, 30))
-    ax.imshow(sliced_data.T, extent=x_extent + y_extent, aspect='auto', vmax=vmax, vmin=vmin, interpolation='nearest', cmap='viridis')
-    ax.set_xlabel('Time (hours)')
-    ax.set_ylabel('Frequency (MHz)')
-    ax.set_title('Dynamic Spectra for %s starting at %s : Time Resolution %s (ms)' % (header.source_name, start_time, np.round(time_res*1000, 1)))
-    ax.invert_yaxis()
-
-    plt.savefig('dynamic_spectra/%s/%s-%s-%sbit-FullBand.png' % (subdir, header.source_name, header.tstart_utc, header.nbits))
-    plt.close()
 
 if __name__ == '__main__':
     main()
