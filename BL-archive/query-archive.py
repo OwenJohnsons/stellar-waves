@@ -7,6 +7,7 @@ Last Updated: 2024-04-24
 import requests
 from tqdm import tqdm
 import pandas as pd
+import time 
 
 TARGETS_URL = "http://seti.berkeley.edu/opendata/api/list-targets"
 
@@ -23,7 +24,7 @@ all_entries = []
 for target in tqdm(trgt_list[1:]):
     payload = {
         "target": target,
-        "limit": 20000  # you can adjust if needed
+        "limit": 20000  # you can adjust if needed, depending on the API limits. 
     }
     
     response = requests.get(API_URL, params=payload)
@@ -46,6 +47,9 @@ for target in tqdm(trgt_list[1:]):
         extracted_data.append(extracted)
     else:
         print(f"Error: {response.status_code} for target {target}")
+        
+    # Note: The it may be reasonable to have a longer sleep here for server health. 
+    time.sleep(0.5) 
         
 df = pd.DataFrame(extracted_data)
 df.to_csv("BL_opendata_metadata.csv", index=False)
