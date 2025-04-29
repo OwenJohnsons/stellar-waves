@@ -7,7 +7,7 @@ Last Updated: 2024-04-24
 import requests
 from tqdm import tqdm
 import pandas as pd
-import time 
+import time
 
 TARGETS_URL = "http://seti.berkeley.edu/opendata/api/list-targets"
 
@@ -18,18 +18,19 @@ if response.status_code == 200:
     print(f"Number of targets on BL API: {len(trgt_list)}")
 else:
     print(f"Error: {response.status_code}")
-    
+    trgt_list = []
+
 API_URL = "http://seti.berkeley.edu/opendata/api/query-files"
 all_entries = []
+counter = 0
+
 for target in tqdm(trgt_list[1:]):
     payload = {
         "target": target,
-        "limit": 20000  # you can adjust if needed, depending on the API limits. 
+        "limit": 20000
     }
     
     response = requests.get(API_URL, params=payload)
-    extracted_data = []
-    
     if response.status_code == 200:
         query_data = response.json()
         metadata = query_data['data']
@@ -40,16 +41,20 @@ for target in tqdm(trgt_list[1:]):
                 "ra_deg": entry.get("ra", "unknown"),
                 "dec_deg": entry.get("decl", "unknown"),
                 "data_url": entry.get("url", "unknown"),
-                "utc": entry.get("utc", "unknown"),   # UTC timestamp
-                "mjd": entry.get("mjd", "unknown"),    # MJD timestamp
+                "utc": entry.get("utc", "unknown"),
+                "mjd": entry.get("mjd", "unknown"),
                 "source_name": entry.get("target", "unknown")
             }
-        extracted_data.append(extracted)
+            all_entries.append(extracted)
     else:
         print(f"Error: {response.status_code} for target {target}")
         
-    # Note: The it may be reasonable to have a longer sleep here for server health. 
-    time.sleep(0.5) 
-        
-df = pd.DataFrame(extracted_data)
+    counter += 1
+    if counter % 100 == 0:
+        df = pd.DataFrame(all_entries)
+        df.to_csv("BL_opendata_metadata.csv", index=False)
+    
+    time.sleep(0.5)
+
+df = pd.DataFrame(all_entries)
 df.to_csv("BL_opendata_metadata.csv", index=False)
